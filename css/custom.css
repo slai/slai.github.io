@@ -72,6 +72,12 @@ code {
 	margin: 0 .25em;
 }
 
+.highlight pre {
+    word-wrap: normal;
+    overflow-x: auto;
+    white-space: pre;
+}
+
 
 .copyright,
 .poweredby
@@ -122,6 +128,7 @@ img.center
 
 .sidebar .lead {
     font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.8);
 }
 
 .content .section-title {
