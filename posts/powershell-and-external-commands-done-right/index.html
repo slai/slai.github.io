@@ -8,7 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
     
     	
-    <meta name="generator" content="Hugo 0.37.1" />
+    <meta name="generator" content="Hugo 0.69.2" />
     
     <title>PowerShell and external commands done right &middot; Samuel Lai</title>
     <meta content="PowerShell and external commands done right - Samuel Lai" property="og:title">
@@ -88,7 +88,7 @@
             <div class="post">
   <h1>PowerShell and external commands done right</h1>
   
-  <div class="col-sm-12 col-md-12">
+  <div class="col-sm-12 col-md-12 meta">
     <span class="text-left post-date meta">
       
       Last updated on 22 December 2013 
@@ -99,92 +99,68 @@
       </span>
   </div>
   
-  
-
-<p>Windows PowerShell is a massive step up from the VBScript horror used to manage Windows systems (I have no idea how people wrote websites with it without going mental). One of the things that annoyed me to no end though was how there seemed to be black magic involved when trying to make PowerShell execute external commands, i.e. not PowerShell cmdlets.</p>
-
+  <p>Windows PowerShell is a massive step up from the VBScript horror used to manage Windows systems, but one of the things that annoyed me was how there seemed to be black magic involved when trying to make PowerShell execute external commands, i.e. not PowerShell cmdlets.</p>
 <p>It is actually quite straight-forward once you wrap your head around it - it&rsquo;s just that we try to do things the way we did in VBScript or in OO languages, and PowerShell doesn&rsquo;t like that.</p>
-
 <h1 id="background">Background</h1>
-
 <p>I&rsquo;m currently writing a script to automate creating and deleting volume shadow copies, creating a ShadowProtect image in between.</p>
-
 <p>This includes normal looking commands like,</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bat" data-lang="bat">H:\backup\scripts\vshadow.exe<span style="color:#75715e"> -p -script=&#34;H:\backup\scripts\vss.cmd&#34; E: M: P:</span></code></pre></div>
-<p>As well as funny looking ShadowProtect commands,</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bat" data-lang="bat">H:\backup\scripts\sbrun.exe<span style="color:#75715e">  -mdn ( sbvol -f  \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy43 \\?\E: : sbcrypt -50 : sbfile -wd H:\backup\backups )</span></code></pre></div>
-<h1 id="the-wrong-way-to-do-it">The wrong way to do it</h1>
-
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bat" data-lang="bat">H:\backup\scripts\vshadow.exe<span style="color:#75715e"> -p -script=&#34;H:\backup\scripts\vss.cmd&#34; E: M: P:</span>
+</code></pre></div><p>As well as funny looking ShadowProtect commands,</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bat" data-lang="bat">H:\backup\scripts\sbrun.exe<span style="color:#75715e">  -mdn ( sbvol -f  \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy43 \\?\E: : sbcrypt -50 : sbfile -wd H:\backup\backups )</span>
+</code></pre></div><h1 id="the-wrong-way-to-do-it">The wrong way to do it</h1>
 <p>If you ask Google, you&rsquo;ll probably get responses telling you to do this:</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">$exe = <span style="color:#e6db74">&#34;H:\backup\scripts\vshadow.exe&#34;</span>
 $arguments = <span style="color:#e6db74">&#39;-p -script=&#34;H:\backup\scripts\vss.cmd&#34; E: M: P:&#39;</span>
 $proc = <span style="color:#66d9ef">[Diagnostics.Process]</span>::Start($exe, $arguments)
-$proc.WaitForExit()</code></pre></div>
-<p>This works, but it isn&rsquo;t the right way to going about mainly because it isn&rsquo;t the PowerShell way. You&rsquo;re actually calling the class in the .NET Framework (which PowerShell is based on) that application developers use to launch external applications. Not only is this more code, but also makes it a bit more complicated if you want to process the standard output/error, and also results in a new command window popping up even if it is just another command line application. This method has gained a bit more legitimacy in some use cases though, and in PowerShell v2, is now accessible using the <a href="http://technet.microsoft.com/en-us/library/hh849848.aspx">Start-Process</a> cmdlet.</p>
-
+$proc.WaitForExit()
+</code></pre></div><p>This works, but it isn&rsquo;t the right way to going about mainly because it isn&rsquo;t the PowerShell way. You&rsquo;re actually calling the class in the .NET Framework (which PowerShell is based on) that application developers use to launch external applications. Not only is this more code, but also makes it a bit more complicated if you want to process the standard output/error, and also results in a new command window popping up even if it is just another command line application. This method has gained a bit more legitimacy in some use cases though, and in PowerShell v2, is now accessible using the <a href="http://technet.microsoft.com/en-us/library/hh849848.aspx">Start-Process</a> cmdlet.</p>
 <p>The next most popular way, but also somewhat error prone and hence the most frustrating, is this:</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">$exe = <span style="color:#e6db74">&#34;H:\backup\scripts\vshadow.exe&#34;</span>
 $arguments = <span style="color:#e6db74">&#34;-p -script=</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74">H:\backup\scripts\vss.cmd</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74"> E: M: P:&#34;</span>
-&amp;$exe $arguments</code></pre></div>
-<p>The ampersand (<code>&amp;</code>) here tells PowerShell to execute that command, instead of treating it as a cmdlet or a string. The backticks (the funny looking single-quotes) are there to escape the following character, similar to the <code>\&quot;</code> in C-based languages, or double-double-quotes (<code>&quot;&quot;</code>) in VB. Otherwise the <code>&quot;</code> character will end the string and the parser will cry when it can&rsquo;t understand what you&rsquo;re trying to say after that. (You can alternatively use single-quotes instead in this case, as I have in the previous example.)</p>
-
+&amp;$exe $arguments
+</code></pre></div><p>The ampersand (<code>&amp;</code>) here tells PowerShell to execute that command, instead of treating it as a cmdlet or a string. The backticks (the funny looking single-quotes) are there to escape the following character, similar to the <code>\&quot;</code> in C-based languages, or double-double-quotes (<code>&quot;&quot;</code>) in VB. Otherwise the <code>&quot;</code> character will end the string and the parser will cry when it can&rsquo;t understand what you&rsquo;re trying to say after that. (You can alternatively use single-quotes instead in this case, as I have in the previous example.)</p>
 <p>The reason why this doesn&rsquo;t work is because PowerShell is a shell first and foremost. What PowerShell is actually doing is executing the specified executable, but then passes all your parameters <em>within quotes</em> (or if it makes more sense, as a single parameter), as you can see in this alternate, more concise version:</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp; <span style="color:#e6db74">&#34;H:\backup\scripts\vshadow.exe&#34;</span> <span style="color:#e6db74">&#34;-p -script=</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74">H:\backup\scripts\vss.cmd</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74"> E: M: P:&#34;</span></code></pre></div>
-<p>You&rsquo;ll probably spend hours pulling your hair out wondering why things aren&rsquo;t working even when the arguments seem to be passed ok (to make things worse, some command line apps work fine with it). You&rsquo;ll also likely get cryptic error messages like,</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">Invalid parameter: &#34;-p -script=`&#34;H:\backup\scripts\vss.cmd`&#34; E: M: P:&#34;</code></pre></div>
-<p>And you&rsquo;ll be left wondering why the hell that is invalid.</p>
-
-<h1 id="enter-echoargs-exe">Enter echoargs.exe</h1>
-
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp; <span style="color:#e6db74">&#34;H:\backup\scripts\vshadow.exe&#34;</span> <span style="color:#e6db74">&#34;-p -script=</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74">H:\backup\scripts\vss.cmd</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74"> E: M: P:&#34;</span>
+</code></pre></div><p>You&rsquo;ll probably spend hours pulling your hair out wondering why things aren&rsquo;t working even when the arguments seem to be passed ok (to make things worse, some command line apps work fine with it). You&rsquo;ll also likely get cryptic error messages like,</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">Invalid parameter: &#34;-p -script=`&#34;H:\backup\scripts\vss.cmd`&#34; E: M: P:&#34;
+</code></pre></div><p>And you&rsquo;ll be left wondering why the hell that is invalid.</p>
+<h1 id="enter-echoargsexe">Enter echoargs.exe</h1>
 <p>Echoargs is a simple tool that spits out the arguments it receives. It is part of the <a href="http://pscx.codeplex.com/">PowerShell Community Extensions</a> download.</p>
-
 <p>If you replaced the executable in the above command with <code>echoargs.exe</code>, you&rsquo;ll be able to see what&rsquo;s happening.</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp; <span style="color:#e6db74">&#34;H:\backup\scripts\echoargs.exe&#34;</span> <span style="color:#e6db74">&#34;-p -script=</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74">H:\backup\scripts\vss.cmd</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74"> E: M: P:&#34;</span></code></pre></div>
-<p>Execute that and you&rsquo;ll get the following output,</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">Arg 0 is &lt;-p -script=H:\backup\scripts\vss.cmd E: M: P:&gt;</code></pre></div>
-<p>See how all the parameters are being interpreted as one string? That is not what you want - you want them to be interpreted as separate arguments.</p>
-
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp; <span style="color:#e6db74">&#34;H:\backup\scripts\echoargs.exe&#34;</span> <span style="color:#e6db74">&#34;-p -script=</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74">H:\backup\scripts\vss.cmd</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74"> E: M: P:&#34;</span>
+</code></pre></div><p>Execute that and you&rsquo;ll get the following output,</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">Arg 0 is &lt;-p -script=H:\backup\scripts\vss.cmd E: M: P:&gt;
+</code></pre></div><p>See how all the parameters are being interpreted as one string? That is not what you want - you want them to be interpreted as separate arguments.</p>
 <h1 id="how-to-do-it-the-powershell-way">How to do it the PowerShell way</h1>
-
 <p>Remember that PowerShell is a shell first and foremost. To run the above external command, just do the following:</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">$exe = <span style="color:#e6db74">&#34;H:\backup\scripts\vshadow.exe&#34;</span>
-&amp;$exe -p -script=H<span style="color:#960050;background-color:#1e0010">:</span>\backup\scripts\vss.cmd E<span style="color:#960050;background-color:#1e0010">:</span> M<span style="color:#960050;background-color:#1e0010">:</span> P<span style="color:#960050;background-color:#1e0010">:</span></code></pre></div>
-<p>Notice that I&rsquo;m not putting all the arguments into a single string, I&rsquo;m just writing them as they are. If you run this with Echoargs, you&rsquo;ll get the following:</p>
+&amp;$exe -p -script=H:\backup\scripts\vss.cmd E: M: P:
+</code></pre></div><p>Notice that I&rsquo;m not putting all the arguments into a single string, I&rsquo;m just writing them as they are. If you run this with Echoargs, you&rsquo;ll get the following:</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">Arg 0 is &lt;-p&gt;
 Arg 1 is &lt;-script=H:\backup\scripts\vss.cmd&gt;
 Arg 2 is &lt;E:&gt;
 Arg 3 is &lt;M:&gt;
-Arg 4 is &lt;P:&gt;</code></pre></div>
-<p>That is what the command line application expects. Notice that each parameter is considered a different argument, as opposed to a single string for all parameters.</p>
-
+Arg 4 is &lt;P:&gt;
+</code></pre></div><p>That is what the command line application expects. Notice that each parameter is considered a different argument, as opposed to a single string for all parameters.</p>
 <h1 id="using-powershell-v3-or-later">Using PowerShell v3 or later?</h1>
-
 <p>If you&rsquo;re using PowerShell v3 (which shipped with Windows 8 and Windows Server 2012 and is also available for Windows 7 / 2008 as a separate download), there is a new language feature that simplifies a lot of this. Instead of having to stuff around with escaping and quoting parameters to dodge the PowerShell parser, you can now use the <code>--%</code> operator which tells PowerShell to stop parsing from that point onward until the end of the line. Everything from that operator onwards is parsed by the <del>Windows Command Processor (cmd.exe)</del> parser used by the program (e.g. MS C/C++ runtime) and <em>all those rules apply instead</em>. This means that you can&rsquo;t reference any PowerShell variables after that operator (any references will be past literally, i.e. <code>$dir</code> will be passed to the external command as <code>$dir</code>), but it also means you can reference <em>environment variables</em> using the cmd.exe syntax, e.g. <code>%USERPROFILE%</code> (I have no idea what expands them; is cmd.exe still involved somehow?).</p>
-
 <p>For example, the following command (which will work only in cmd.exe and not PowerShell in its current form),</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bat" data-lang="bat">H:\backup\scripts\sbrun.exe<span style="color:#75715e"> -mdn ( sbvol -f  \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy43 \\?\E: : sbcrypt -50 : sbfile -wd H:\backup\backups )</span></code></pre></div>
-<p>can be written as,</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;<span style="color:#e6db74">&#34;H:\backup\scripts\sbrun.exe&#34;</span> --% -mdn ( sbvol <span style="color:#f92672">-f</span>  \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy43 \\?\E<span style="color:#960050;background-color:#1e0010">:</span> <span style="color:#960050;background-color:#1e0010">:</span> sbcrypt -50 <span style="color:#960050;background-color:#1e0010">:</span> sbfile -wd H<span style="color:#960050;background-color:#1e0010">:</span>\backup\backups )</code></pre></div>
-<p>for execution within PowerShell - there is no need to bother with escaping the brackets.</p>
-
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bat" data-lang="bat">H:\backup\scripts\sbrun.exe<span style="color:#75715e"> -mdn ( sbvol -f  \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy43 \\?\E: : sbcrypt -50 : sbfile -wd H:\backup\backups )</span>
+</code></pre></div><p>can be written as,</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;<span style="color:#e6db74">&#34;H:\backup\scripts\sbrun.exe&#34;</span> --% -mdn ( sbvol <span style="color:#f92672">-f</span>  \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy43 \\?\E: <span style="color:#960050;background-color:#1e0010">:</span> sbcrypt -50 <span style="color:#960050;background-color:#1e0010">:</span> sbfile -wd H:\backup\backups )
+</code></pre></div><p>for execution within PowerShell - there is no need to bother with escaping the brackets.</p>
 <p><em>Remember that this only exists in PowerShell v3 or later so if your scripts target older versions of PowerShell, you cannot use this. Also, if you need to reference PowerShell variables, you can&rsquo;t use this trick either. Read on.</em></p>
-
 <h1 id="what-about-parameters-with-spaces-in-them">What about parameters with spaces in them?</h1>
-
 <p>Now, you might be asking, how do I send parameters that contain spaces? Normally we would quote the part that has spaces, e.g.</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe -p -script=<span style="color:#e6db74">&#34;H:\backup\scripts temp\vss.cmd&#34;</span> E<span style="color:#960050;background-color:#1e0010">:</span> M<span style="color:#960050;background-color:#1e0010">:</span> P<span style="color:#960050;background-color:#1e0010">:</span></code></pre></div>
-<p>But not in Powershell. That will simply confuse it. Instead, just place the entire parameter in quotes, e.g.</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe -p <span style="color:#e6db74">&#34;-script=H:\backup\scripts temp\vss.cmd&#34;</span> E<span style="color:#960050;background-color:#1e0010">:</span> M<span style="color:#960050;background-color:#1e0010">:</span> P<span style="color:#960050;background-color:#1e0010">:</span></code></pre></div>
-<h1 id="or-parameters-where-the-quote-characters-need-to-passed-on">Or parameters where the quote characters need to passed on?</h1>
-
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe -p -script=<span style="color:#e6db74">&#34;H:\backup\scripts temp\vss.cmd&#34;</span> E: M: P:
+</code></pre></div><p>But not in Powershell. That will simply confuse it. Instead, just place the entire parameter in quotes, e.g.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe -p <span style="color:#e6db74">&#34;-script=H:\backup\scripts temp\vss.cmd&#34;</span> E: M: P:
+</code></pre></div><h1 id="or-parameters-where-the-quote-characters-need-to-passed-on">Or parameters where the quote characters need to passed on?</h1>
 <p>If it is necessary for the quotes to be passed on to the external command (it very rarely is), you will need to double-escape the quotes inside the string, once for PowerShell using the backtick character (`), and again for the <del>Windows Command Processor</del> parser using the backslash character (<code>\</code>). For example,</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe -p <span style="color:#e6db74">&#34;-script=\</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74">H:\backup\scripts temp\vss.cmd\</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74">&#34;</span> E<span style="color:#960050;background-color:#1e0010">:</span> M<span style="color:#960050;background-color:#1e0010">:</span> P<span style="color:#960050;background-color:#1e0010">:</span></code></pre></div>
-<p>When you execute an external command, Powershell grabs the command and the arguments (after the strings have been processed by Powershell and the Powershell escape characters removed), then passes it as a single string to the <del>Windows Command Processor (or possibly straight to the Windows Shell/ Win32 API)</del> program for execution. The <del>Windows Command Processor</del> program, depending on the parser used (e.g. MS C/C++ runtime), has a separate set of rules for escaping things, therefore it is necessary to escape again to prevent it from interpreting the quotes. Most (but annoyingly, not all) use the MS C/C++ runtime parser, and from what I can gather, it splits up the string into arguments by splitting at each space, unless the space is inside quotes. Because the inner quotes were not escaped using the <del>Windows Command Processor</del> parser escape character (the backslash), the <del>command processor</del> parser interpreted them as if the quoted parts contained &ldquo;-script=&rdquo; and &ldquo;&rdquo;, therefore the space between <code>scripts</code> and <code>temp</code> isn&rsquo;t actually within any quotes and hence split.</p>
-
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe -p <span style="color:#e6db74">&#34;-script=\</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74">H:\backup\scripts temp\vss.cmd\</span><span style="color:#ae81ff">`&#34;</span><span style="color:#e6db74">&#34;</span> E: M: P:
+</code></pre></div><p>When you execute an external command, Powershell grabs the command and the arguments (after the strings have been processed by Powershell and the Powershell escape characters removed), then passes it as a single string to the <del>Windows Command Processor (or possibly straight to the Windows Shell/ Win32 API)</del> program for execution. The <del>Windows Command Processor</del> program, depending on the parser used (e.g. MS C/C++ runtime), has a separate set of rules for escaping things, therefore it is necessary to escape again to prevent it from interpreting the quotes. Most (but annoyingly, not all) use the MS C/C++ runtime parser, and from what I can gather, it splits up the string into arguments by splitting at each space, unless the space is inside quotes. Because the inner quotes were not escaped using the <del>Windows Command Processor</del> parser escape character (the backslash), the <del>command processor</del> parser interpreted them as if the quoted parts contained &ldquo;-script=&rdquo; and &ldquo;&quot;, therefore the space between <code>scripts</code> and <code>temp</code> isn&rsquo;t actually within any quotes and hence split.</p>
 <p>You can see this happening by playing with echoargs.exe (which uses the MS C/C++ runtime parser) inside the Command Prompt (not the PowerShell prompt).</p>
-
 <p><em>The order of the escape characters is important - it must be the backslash character first, then the backtick character. Otherwise, because PowerShell processes the command first, the backtick will escape the backslash instead of the quote as intended.</em></p>
-
 <p>If the program does not use the MS C/C++ runtime parser to parse command line arguments, then how it is parsed is entirely dependent on how the program implemented it. The following is a quick PowerShell script that shows you what the raw command line is being passed to the program as well as how one of the alternate methods of parsing it works (CommandLineToArgvW - I believe this is <em>not</em> what the MS C/C++ runtime uses).</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">$Kernel32Definition = <span style="color:#e6db74">@&#39;
 </span><span style="color:#e6db74">[DllImport(&#34;kernel32&#34;)]
@@ -229,36 +205,30 @@ Write-Host <span style="color:#e6db74">&#34;The command line as parsed by Comman
 <span style="color:#75715e"># -lt to skip the last item, which is a NULL ptr</span>
 <span style="color:#66d9ef">for</span> ($i = 0; $i <span style="color:#f92672">-lt</span> $ParsedArgCount; $i += 1) {
     Write-Host <span style="color:#e6db74">&#34;argv[$i] &lt;</span>$($ParsedArgs[$i])<span style="color:#e6db74">&gt;&#34;</span>
-}</code></pre></div>
-<p>Save the above script to a file, e.g. <code>GetCommandLine.ps1</code>, and execute it like so -</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">PS C<span style="color:#960050;background-color:#1e0010">:</span>\Users\User\Desktop&gt; powershell .\GetCommandLine.ps1 a b<span style="color:#e6db74">&#34;c d&#34;</span>e f
+}
+</code></pre></div><p>Save the above script to a file, e.g. <code>GetCommandLine.ps1</code>, and execute it like so -</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">PS C:\Users\User\Desktop&gt; powershell .\GetCommandLine.ps1 a b<span style="color:#e6db74">&#34;c d&#34;</span>e f
 The raw command line is (excluding the angle brackets)\<span style="color:#960050;background-color:#1e0010">:</span>
 &lt;<span style="color:#e6db74">&#34;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&#34;</span>  .\GetCommandLine.ps1 a <span style="color:#e6db74">&#34;bc de&#34;</span> f&gt;
 
 The command line as parsed by CommandLineToArgvW (not MSVCRT) is<span style="color:#960050;background-color:#1e0010">:</span>
-argv[0] &lt;C<span style="color:#960050;background-color:#1e0010">:</span>\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&gt;
+argv[0] &lt;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&gt;
 argv[1] &lt;.\GetCommandLine.ps1&gt;
 argv[2] &lt;a&gt;
 argv[3] &lt;bc de&gt;
-argv[4] &lt;f&gt;</code></pre></div>
-<p><em>It is important to execute it in a separate instance of PowerShell (hence the &lsquo;powershell&rsquo; in the command line). Otherwise, it will simply show you the arguments of the current instance of PowerShell when it was launched.</em> Use the output of the raw command line to see what PowerShell is passing to the program you&rsquo;re running, i.e. after any parsing and manipulating that PowerShell does. In this example, notice how the position of the quote characters have changed between the original command line and the raw command line as printed by the script - this is PowerShell manipulating the strings (I&rsquo;m not quite sure what it is doing though; looks like string concatenation for adjacent strings, but not sure why the quote character has moved).</p>
-
+argv[4] &lt;f&gt;
+</code></pre></div><p><em>It is important to execute it in a separate instance of PowerShell (hence the &lsquo;powershell&rsquo; in the command line). Otherwise, it will simply show you the arguments of the current instance of PowerShell when it was launched.</em> Use the output of the raw command line to see what PowerShell is passing to the program you&rsquo;re running, i.e. after any parsing and manipulating that PowerShell does. In this example, notice how the position of the quote characters have changed between the original command line and the raw command line as printed by the script - this is PowerShell manipulating the strings (I&rsquo;m not quite sure what it is doing though; looks like string concatenation for adjacent strings, but not sure why the quote character has moved).</p>
 <p>For more on the bizarre and inconsistent world of Windows command argument parsing, see <a href="http://www.daviddeley.com/autohotkey/parameters/parameters.htm#WINARGV">http://www.daviddeley.com/autohotkey/parameters/parameters.htm#WINARGV</a> and <a href="https://gist.github.com/dolmen/6030690/raw/5dde469149420f12acd6f5a6120c3a90474e4088/ref.md">https://gist.github.com/dolmen/6030690/raw/5dde469149420f12acd6f5a6120c3a90474e4088/ref.md</a>.</p>
-
-<h1 id="and-parameters-with-dynamic-calculated-values">And parameters with dynamic/calculated values?</h1>
-
+<h1 id="and-parameters-with-dynamiccalculated-values">And parameters with dynamic/calculated values?</h1>
 <p>Remember the <a href="http://blogs.msdn.com/b/powershell/archive/2006/07/15/variable-expansion-in-strings-and-herestrings.aspx">variable expansion rules in PowerShell</a>. Enclose strings inside double-quotes, and variables inside will be expanded, e.g.</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">$scriptsTempPath = <span style="color:#e6db74">&#34;H:\backup\scripts temp&#34;</span>
-&amp;$exe -p <span style="color:#e6db74">&#34;-script=$scriptsTempPath\vss.cmd&#34;</span> E<span style="color:#960050;background-color:#1e0010">:</span> M<span style="color:#960050;background-color:#1e0010">:</span> P<span style="color:#960050;background-color:#1e0010">:</span></code></pre></div>
-<p>Because variable expansion only works if strings are enclosed inside double-quotes, <em>double-quotes are required, regardless if whether or not there are spaces in the parameter</em>. You can have as many variables as you want inside each parameter.</p>
-
+&amp;$exe -p <span style="color:#e6db74">&#34;-script=$scriptsTempPath\vss.cmd&#34;</span> E: M: P:
+</code></pre></div><p>Because variable expansion only works if strings are enclosed inside double-quotes, <em>double-quotes are required, regardless if whether or not there are spaces in the parameter</em>. You can have as many variables as you want inside each parameter.</p>
 <h1 id="or-a-variable-containing-a-single-parameter">Or a variable containing a single parameter?</h1>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">$scriptsParameter = <span style="color:#e6db74">&#34;-script=H:\backup\scripts temp\vss.cmd&#34;</span>
-&amp;$exe -p $scriptsParameter E<span style="color:#960050;background-color:#1e0010">:</span> M<span style="color:#960050;background-color:#1e0010">:</span> P<span style="color:#960050;background-color:#1e0010">:</span></code></pre></div>
-<p>No double-quotes are required here because the variable is surrounded by whitespace, so PowerShell will automatically expand the variable into a parameter. Using double-quotes won&rsquo;t break anything though; they are just redundant.</p>
-
+&amp;$exe -p $scriptsParameter E: M: P:
+</code></pre></div><p>No double-quotes are required here because the variable is surrounded by whitespace, so PowerShell will automatically expand the variable into a parameter. Using double-quotes won&rsquo;t break anything though; they are just redundant.</p>
 <h1 id="but-what-if-i-want-to-build-the-arguments-to-pass-in-my-script">But what if I want to build the arguments to pass in my script?</h1>
-
 <p>You need to know a PowerShell secret. If you specify an array of values, it will automatically expand them into separate parameters. For example,</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">$drivesToBackup = @( ) <span style="color:#75715e"># new empty array</span>
 $drivesToBackup += <span style="color:#e6db74">&#34;E:&#34;</span> <span style="color:#75715e"># always backup E drive</span>
@@ -268,24 +238,22 @@ $drivesToBackup += <span style="color:#e6db74">&#34;E:&#34;</span> <span style="
     $drivesToBackup += <span style="color:#e6db74">&#34;C:&#34;</span>
 }
 
-&amp;$exe -p <span style="color:#e6db74">&#34;-script=H:\backup\scripts\vss.cmd&#34;</span> $drivesToBackup</code></pre></div>
-<p>If today was the first of the month, and if you run echoargs.exe you&rsquo;ll get the following output:</p>
+&amp;$exe -p <span style="color:#e6db74">&#34;-script=H:\backup\scripts\vss.cmd&#34;</span> $drivesToBackup
+</code></pre></div><p>If today was the first of the month, and if you run echoargs.exe you&rsquo;ll get the following output:</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">Arg 0 is &lt;-p&gt;
 Arg 1 is &lt;-script=H:\backup\scripts\vss.cmd&gt;
 Arg 2 is &lt;E:&gt;
-Arg 3 is &lt;C:&gt;</code></pre></div>
-<p>All of the above tricks work fine with command line apps that use the forward-slash (<code>/</code>) to denote the start of a parameter too (instead of a dash/hyphen), e.g.</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe /p <span style="color:#e6db74">&#34;/script=H:\backup\scripts\vss.cmd&#34;</span> E<span style="color:#960050;background-color:#1e0010">:</span> M<span style="color:#960050;background-color:#1e0010">:</span></code></pre></div>
-<h1 id="but-it-still-doesn-t-work">But it still doesn&rsquo;t work!?!!!</h1>
-
+Arg 3 is &lt;C:&gt;
+</code></pre></div><p>All of the above tricks work fine with command line apps that use the forward-slash (<code>/</code>) to denote the start of a parameter too (instead of a dash/hyphen), e.g.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe /p <span style="color:#e6db74">&#34;/script=H:\backup\scripts\vss.cmd&#34;</span> E: M:
+</code></pre></div><h1 id="but-it-still-doesnt-work">But it still doesn&rsquo;t work!?!!!</h1>
 <p>Sometimes you run into command line apps that use non-standard notation (not that there ever was much of a defined standard). Something like this for example (this is a command line from scripting ShadowProtect),</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;<span style="color:#e6db74">&#34;H:\backup\scripts\sbrun.exe&#34;</span>  -mdn ( sbvol <span style="color:#f92672">-f</span>  \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy43 \\?\E<span style="color:#960050;background-color:#1e0010">:</span> <span style="color:#960050;background-color:#1e0010">:</span> sbcrypt -50 <span style="color:#960050;background-color:#1e0010">:</span> sbfile -wd H<span style="color:#960050;background-color:#1e0010">:</span>\backup\backups )</code></pre></div>
-<p>If we run this using the tricks above, or even with echoargs.exe, you&rsquo;ll get PowerShell errors. This is because the parentheses in PowerShell denote code that should be executed and the result inserted in place of the parentheses. So in the above code, PowerShell is trying to find a cmdlet named sbvol, or an executable named sbvol in PATH. It fails because no such command exists by default.</p>
-
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;<span style="color:#e6db74">&#34;H:\backup\scripts\sbrun.exe&#34;</span>  -mdn ( sbvol <span style="color:#f92672">-f</span>  \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy43 \\?\E: <span style="color:#960050;background-color:#1e0010">:</span> sbcrypt -50 <span style="color:#960050;background-color:#1e0010">:</span> sbfile -wd H:\backup\backups )
+</code></pre></div><p>If we run this using the tricks above, or even with echoargs.exe, you&rsquo;ll get PowerShell errors. This is because the parentheses in PowerShell denote code that should be executed and the result inserted in place of the parentheses. So in the above code, PowerShell is trying to find a cmdlet named sbvol, or an executable named sbvol in PATH. It fails because no such command exists by default.</p>
 <p>To stop PowerShell from interpreting the parentheses and just pass them on instead, simple enclose them in quotes, e.g.</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;<span style="color:#e6db74">&#34;H:\backup\scripts\sbrun.exe&#34;</span>  -mdn <span style="color:#e6db74">&#34;(&#34;</span> sbvol <span style="color:#f92672">-f</span>  \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy43 \\?\E<span style="color:#960050;background-color:#1e0010">:</span> <span style="color:#960050;background-color:#1e0010">:</span> sbcrypt -50 <span style="color:#960050;background-color:#1e0010">:</span> sbfile -wd H<span style="color:#960050;background-color:#1e0010">:</span>\backup\backups <span style="color:#e6db74">&#34;)&#34;</span></code></pre></div>
-<p>Using the curly brackets, or braces, will also trip up Powershell. If you need to pass the brace characters (<code>{</code> or <code>}</code>) to an external command, they will need to be enclosed in quotes, otherwise you&rsquo;ll get cryptic parameters passed to your external command app, e.g.</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">PS C<span style="color:#960050;background-color:#1e0010">:</span>\Users\Sam&gt; .\echoargs.exe { hello }
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;<span style="color:#e6db74">&#34;H:\backup\scripts\sbrun.exe&#34;</span>  -mdn <span style="color:#e6db74">&#34;(&#34;</span> sbvol <span style="color:#f92672">-f</span>  \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy43 \\?\E: <span style="color:#960050;background-color:#1e0010">:</span> sbcrypt -50 <span style="color:#960050;background-color:#1e0010">:</span> sbfile -wd H:\backup\backups <span style="color:#e6db74">&#34;)&#34;</span>
+</code></pre></div><p>Using the curly brackets, or braces, will also trip up Powershell. If you need to pass the brace characters (<code>{</code> or <code>}</code>) to an external command, they will need to be enclosed in quotes, otherwise you&rsquo;ll get cryptic parameters passed to your external command app, e.g.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">PS C:\Users\Sam&gt; .\echoargs.exe { hello }
 Arg 0 is &lt;-encodedCommand&gt;
 Arg 1 is &lt;IABoAGUAbABsAG8AIAA=&gt;
 Arg 2 is &lt;-inputFormat&gt;
@@ -293,33 +261,28 @@ Arg 3 is &lt;xml&gt;
 Arg 4 is &lt;-outputFormat&gt;
 Arg 5 is &lt;text&gt;
 
-PS C<span style="color:#960050;background-color:#1e0010">:</span>\Users\Sam&gt; .\echoargs.exe <span style="color:#e6db74">&#34;{&#34;</span> hello <span style="color:#e6db74">&#34;}&#34;</span>
+PS C:\Users\Sam&gt; .\echoargs.exe <span style="color:#e6db74">&#34;{&#34;</span> hello <span style="color:#e6db74">&#34;}&#34;</span>
 Arg 0 is &lt;{&gt;
 Arg 1 is &lt;hello&gt;
-Arg 2 is &lt;}&gt;</code></pre></div>
-<p>What&rsquo;s actually happening is that PowerShell considers the contents of the braces to be a script block, which are often used with cmdlets such as <code>Where-Object</code> or <code>ForEach-Object</code>.</p>
-
+Arg 2 is &lt;}&gt;
+</code></pre></div><p>What&rsquo;s actually happening is that PowerShell considers the contents of the braces to be a script block, which are often used with cmdlets such as <code>Where-Object</code> or <code>ForEach-Object</code>.</p>
 <p>The square brackets (<code>[</code> and <code>]</code>) also have special meaning in PowerShell (<a href="http://msdn.microsoft.com/en-us/library/aa717088(VS.85).aspx">globbing</a>), but generally won&rsquo;t be interpreted as anything special when you&rsquo;re executing external commands; only certain cmdlets trigger the globbing behaviour, e.g. <code>Get-ChildItem</code>. So using them without enclosing them in quotes is fine.</p>
-
 <p>Also remember the character that triggers PowerShell&rsquo;s variable expansion, the dollar sign (<code>$</code>). It should be escaped using a backtick if it is to be passed to the external executable. PowerShell is actually quite specific when it comes to parsing the <code>$</code> sign, but it is often safer to escape just in case.  If in doubt, try using single-quotes instead (variable expansion does not happen with single-quoted strings).</p>
-
 <h1 id="other-bits-of-useful-info">Other bits of useful info</h1>
-
 <p>To refer to the current directory, use the dot, e.g.</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;<span style="color:#e6db74">&#34;.\echoargs.exe&#34;</span></code></pre></div>
-<p>Note that the current directory may not necessarily be the directory the script is running from - it is dependent on the &lsquo;working directory&rsquo; when executing the script, and also if you do any <code>cd</code> or <code>Set-Location</code> commands.</p>
-
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;<span style="color:#e6db74">&#34;.\echoargs.exe&#34;</span>
+</code></pre></div><p>Note that the current directory may not necessarily be the directory the script is running from - it is dependent on the &lsquo;working directory&rsquo; when executing the script, and also if you do any <code>cd</code> or <code>Set-Location</code> commands.</p>
 <p>To get the script directory, include the following line within the script file, in the script scope (i.e. not within a function or some other script block). <a href="http://blogs.msdn.com/b/powershell/archive/2007/06/19/get-scriptdirectory.aspx">Source</a>.</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">$scriptDirectory = Split-Path ($MyInvocation.MyCommand.Path) -Parent</code></pre></div>
-<p>Lastly, if you want to send the output of the command line app to the screen, and you&rsquo;re running that inside a function, pipe the command to Out-Host to force it to the screen, e.g.</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe -p <span style="color:#e6db74">&#34;-script=H:\backup\scripts temp\vss.cmd&#34;</span> E<span style="color:#960050;background-color:#1e0010">:</span> M<span style="color:#960050;background-color:#1e0010">:</span> P<span style="color:#960050;background-color:#1e0010">:</span> | Out-Host</code></pre></div>
-<p>And if you want PowerShell to wait until that external process has finished before proceeding (but you don&rsquo;t want the output going anywhere), use <code>Out-Null</code>, e.g.</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe -p <span style="color:#e6db74">&#34;-script=H:\backup\scripts temp\vss.cmd&#34;</span> E<span style="color:#960050;background-color:#1e0010">:</span> M<span style="color:#960050;background-color:#1e0010">:</span> P<span style="color:#960050;background-color:#1e0010">:</span> | Out-Null</code></pre></div>
-<p>If you did want the output you can either pipe it to <code>Out-Host</code> instead to show it on the screen or if you want it in a variable, you can pipe it to the <code>Tee-Object</code> cmdlet first, like this —</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe -p <span style="color:#e6db74">&#34;-script=H:\backup\scripts temp\vss.cmd&#34;</span> E<span style="color:#960050;background-color:#1e0010">:</span> M<span style="color:#960050;background-color:#1e0010">:</span> P<span style="color:#960050;background-color:#1e0010">:</span> | Tee-Object -Variable scriptOutput | Out-Null</code></pre></div>
-<p>The output can then be accessed using the <code>scriptOutput</code> variable, e.g.</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">echo $scriptOutput</code></pre></div>
-<p>When the output of a command is piped to another cmdlet, PowerShell has to stop and wait for the initial command and the cmdlets the output has been piped into to complete before continuing.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">$scriptDirectory = Split-Path ($MyInvocation.MyCommand.Path) -Parent
+</code></pre></div><p>Lastly, if you want to send the output of the command line app to the screen, and you&rsquo;re running that inside a function, pipe the command to Out-Host to force it to the screen, e.g.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe -p <span style="color:#e6db74">&#34;-script=H:\backup\scripts temp\vss.cmd&#34;</span> E: M: P: | Out-Host
+</code></pre></div><p>And if you want PowerShell to wait until that external process has finished before proceeding (but you don&rsquo;t want the output going anywhere), use <code>Out-Null</code>, e.g.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe -p <span style="color:#e6db74">&#34;-script=H:\backup\scripts temp\vss.cmd&#34;</span> E: M: P: | Out-Null
+</code></pre></div><p>If you did want the output you can either pipe it to <code>Out-Host</code> instead to show it on the screen or if you want it in a variable, you can pipe it to the <code>Tee-Object</code> cmdlet first, like this —</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">&amp;$exe -p <span style="color:#e6db74">&#34;-script=H:\backup\scripts temp\vss.cmd&#34;</span> E: M: P: | Tee-Object -Variable scriptOutput | Out-Null
+</code></pre></div><p>The output can then be accessed using the <code>scriptOutput</code> variable, e.g.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-powershell" data-lang="powershell">echo $scriptOutput
+</code></pre></div><p>When the output of a command is piped to another cmdlet, PowerShell has to stop and wait for the initial command and the cmdlets the output has been piped into to complete before continuing.</p>
 
 </div>
 

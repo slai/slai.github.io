@@ -1,6 +1,21 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  
+  <url>
+    <loc>https://slai.github.io/posts/customising-ubuntu-live-isos-with-docker/</loc>
+    <lastmod>2020-06-07T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://slai.github.io/posts/</loc>
+    <lastmod>2020-06-07T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://slai.github.io/</loc>
+    <lastmod>2020-06-07T00:00:00+00:00</lastmod>
+  </url>
   
   <url>
     <loc>https://slai.github.io/posts/powershell-and-external-commands-done-right/</loc>
@@ -8,35 +23,7 @@
   </url>
   
   <url>
-    <loc>https://slai.github.io/</loc>
-    <priority>0</priority>
-    <xhtml:link
-                rel="alternate"
-                hreflang="en"
-                href="https://slai.github.io/"
-                />
-  </url>
-  
-  <url>
-    <loc>https://slai.github.io/</loc>
-    <priority>0</priority>
-    <xhtml:link
-                rel="alternate"
-                hreflang="en"
-                href="https://slai.github.io/"
-                />
-  </url>
-  
-  <url>
-    <loc>https://slai.github.io/posts/</loc>
-    <lastmod>2013-12-22T00:00:00+00:00</lastmod>
-    <priority>0</priority>
-  </url>
-  
-  <url>
-    <loc>https://slai.github.io/</loc>
-    <lastmod>2013-12-22T00:00:00+00:00</lastmod>
-    <priority>0</priority>
+    <loc>https://slai.github.io/index.html</loc>
   </url>
   
 </urlset>

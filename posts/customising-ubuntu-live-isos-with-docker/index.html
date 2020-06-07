@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="" class="wf-firasans-n4-active wf-active">
+	<head>
+    <link href="http://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <!-- Enable responsiveness on mobile devices --> 
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    
+    	
+    <meta name="generator" content="Hugo 0.69.2" />
+    
+    <title>Customising Ubuntu live ISOs with Docker &middot; Samuel Lai</title>
+    <meta content="Customising Ubuntu live ISOs with Docker - Samuel Lai" property="og:title">
+    <meta content=" - " property="og:description">    
+    <!-- CSS --> 
+    <link rel="stylesheet" href="https://slai.github.io/css/print.css" media="print">
+    <link rel="stylesheet" href="https://slai.github.io/css/poole.css">
+    <link rel="stylesheet" href="https://slai.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Fira+Sans:300,300i,400,400i,500">
+    
+    <script defer src="https://use.fontawesome.com/releases/v5.0.6/js/all.js"></script>
+    
+    <!-- Customised CSS -->
+    <link rel="stylesheet" href="https://slai.github.io/css/custom.css">
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+
+	</head>
+    <body class="theme-base-0c " >
+        <div class="sidebar">
+	<div class="container text-right">
+		<div class="sidebar-about">
+			<a href="https://slai.github.io/">
+				<h1 class="brand">Samuel<br />Lai</h1>
+			</a>
+			
+			<p class="lead">
+				Software engineer, working in <strong>Python</strong> and <strong>Go</strong>.
+				Infrastructure nerd deploying to <strong>Linux</strong> with <strong>AWS</strong> and <strong>Docker</strong>.
+				Interested in building things, automating processes and improving developer tooling and efficiency.
+			</p>
+			<p class="lead">
+				<i class="fas fa-globe"></i> London, UK
+			</p>
+		</div>
+		
+<div>
+	<ul class="sidebar-nav">
+		
+		
+		</li>
+	</ul>
+</div>
+
+        <div class="external-links">
+			<ul>
+				<li>
+					<a href="https://github.com/slai"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+					<a href="https://github.com/slai">GitHub</a>
+				</li>
+				<li>
+					<a href="https://bitbucket.org/samuel.lai"><i class="fab fa-bitbucket fa-lg" aria-hidden="true"></i></a>
+					<a href="https://bitbucket.org/samuel.lai">Bitbucket</a>
+				</li>
+				<li>
+					<a href="https://stackoverflow.com/users/150999"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+					<a href="https://stackoverflow.com/users/150999">StackOverflow</a>
+				</li>
+			</ul>
+        </div>
+		<p class="copyright">
+			Built with <a href="https://gohugo.io/">Hugo</a> &amp;
+			<a href="https://github.com/htr3n/hyde-hyde">hyde-hyde</a>
+			(<a href="https://creativecommons.org/licenses/by/4.0">CC BY 4.0</a>)
+        </p>
+	</div>
+</div>
+
+        <div class="content container">
+            <div class="post">
+  <h1>Customising Ubuntu live ISOs with Docker</h1>
+  
+  <div class="col-sm-12 col-md-12 meta">
+    <span class="text-left post-date meta">
+      
+      Last updated on 7 June 2020 
+      
+      
+      
+      
+      </span>
+  </div>
+  
+  <p>Ubuntu live ISOs are often used for installing Ubuntu, but can also be useful for a number of other cases, including pre-configured desktops with no persistence and custom ISOs for installation. Traditionally, these have been <a href="https://help.ubuntu.com/community/LiveCDCustomizationFromScratch">created with chroots</a> and there are GUI tools like <a href="https://launchpad.net/cubic">Cubic</a> that make this process easier.</p>
+<p>This process doesn&rsquo;t have any built-in &lsquo;checkpointing&rsquo; though, so it can be difficult to iterate and be confident that you&rsquo;re not creating a non-reproducible snowflake. One tool that does do this very well however, is Docker&rsquo;s <a href="https://docs.docker.com/develop/develop-images/baseimages/">image building system</a>. This article will go through how to use that system to create Ubuntu live ISOs.</p>
+<h2 id="requirements">Requirements</h2>
+<p>To start, a Linux distro with <a href="https://github.com/AgentD/squashfs-tools-ng">squashfs-tools-ng</a> binaries available is needed to extract and repack the disk image in the ISO. At the time of writing, Ubuntu 20.04 LTS is the earliest version of Ubuntu supported.</p>
+<p><a href="https://docs.docker.com/engine/install/ubuntu/">Docker</a> is also needed, as are the following packages -</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">apt-get install p7zip-full grub2-common mtools xorriso squashfs-tools-ng
+</code></pre></div><p>Finally, download a copy of the Ubuntu live ISO to be customised from <a href="https://ubuntu.com/download/desktop">https://ubuntu.com/download/desktop</a>. (This process will likely also work for other Ubuntu editions like the server edition, but there are often better ways to deploy servers.)</p>
+<h2 id="creating-the-docker-base-image">Creating the Docker base image</h2>
+<p>The ISO works by booting the Linux kernel, mounting a squashfs image and starting Ubuntu from that. Therefore we need to grab that squashfs image from the ISO and create a Docker base image from it.</p>
+<p>Run the following command to extract the squashfs image from the ISO -</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh"><span style="color:#75715e"># UBUNTU_ISO_PATH=path to the Ubuntu live ISO downloaded earlier</span>
+7z e -o. <span style="color:#e6db74">&#34;</span>$UBUNTU_ISO_PATH<span style="color:#e6db74">&#34;</span> casper/filesystem.squashfs
+</code></pre></div><p>Then import that squashfs image into Docker -</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">sqfs2tar filesystem.squashfs | sudo docker import - <span style="color:#e6db74">&#34;ubuntulive:base&#34;</span>
+</code></pre></div><p>This will take a few minutes to complete.</p>
+<h2 id="customising-using-a-dockerfile">Customising using a Dockerfile</h2>
+<p>Now that the squashfs image is available as an image in Docker, we can build a <a href="https://docs.docker.com/engine/reference/builder/">Dockerfile</a> that modifies it.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-dockerfile" data-lang="dockerfile"><span style="color:#75715e"># in the previous section, we imported the squashfs image into Docker as &#39;ubuntulive:base&#39;</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">FROM</span><span style="color:#e6db74"> ubuntulive:base</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#75715e"># set environment variables so apt installs packages non-interactively</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#75715e"># these variables will only be set in Docker, not in the resultant image</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">ENV</span> DEBIAN_FRONTEND<span style="color:#f92672">=</span>noninteractive DEBIAN_PRIORITY<span style="color:#f92672">=</span>critical
+
+<span style="color:#75715e"># make some modifications, e.g. install Google Chrome</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">RUN</span> wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -<span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">RUN</span> sh -c <span style="color:#e6db74">&#39;echo &#34;deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main&#34; &gt;&gt; /etc/apt/sources.list.d/google-chrome.list&#39;</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">RUN</span> apt-get update<span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">RUN</span> apt-get install -y google-chrome-stable<span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#75715e"># install packages needed to repack the ISO (we&#39;ll be using this image to repack itself)</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#75715e"># grub-pc-bin needed for BIOS support</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#75715e"># grub-egi-amd64-bin and grub-efi-amd64-signed for EFI support</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#75715e"># grub2-common, mtools and xorriso are needed to build the ISO, xorriso is in universe repository</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">RUN</span> add-apt-repository <span style="color:#e6db74">&#34;deb http://archive.ubuntu.com/ubuntu </span><span style="color:#66d9ef">$(</span>lsb_release -sc<span style="color:#66d9ef">)</span><span style="color:#e6db74"> universe&#34;</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">RUN</span> apt-get install -y grub2-common grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed mtools xorriso<span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#75715e"># delete obsolete packages and any temporary state</span><span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">RUN</span> apt-get autoremove -y <span style="color:#f92672">&amp;&amp;</span> apt-get clean<span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">RUN</span> rm -rf <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    /tmp/* <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    /boot/* <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    /var/backups/* <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    /var/log/* <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    /var/run/* <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    /var/crash/* <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    /var/lib/apt/lists/* <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    ~/.bash_history<span style="color:#960050;background-color:#1e0010">
+</span></code></pre></div><p>Before trying to build your customised image, run the following to exclude the squashfs image and ISO from your build context to save time -</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">echo <span style="color:#e6db74">&#34;**/*.squashfs&#34;</span> &gt;&gt; .dockerignore
+echo <span style="color:#e6db74">&#34;**/*.iso&#34;</span> &gt;&gt; .dockerignore
+</code></pre></div><p>Now, to build your customised image, run -</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">sudo docker build -t ubuntulive:image .
+</code></pre></div><p>If you&rsquo;re not happy with the output or errors occur, amend your Dockerfile and run the above command again to retry. It is also possible to explore the image and/or test commands at any point by copying the last successful image ID in the <code>docker build</code> output and running an instance of it, i.e. <code>sudo docker run -it --rm IMAGE_ID /bin/bash</code>.</p>
+<h2 id="repacking-the-squashfs-image">Repacking the squashfs image</h2>
+<p>Once you&rsquo;re happy with the image and <code>docker build</code> successfully completes, it is time to extract and convert the Docker image back into a squashfs image.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh"><span style="color:#75715e"># run an instance of the Docker image</span>
+CONTAINER_ID<span style="color:#f92672">=</span><span style="color:#66d9ef">$(</span>sudo docker run -d ubuntulive:image /usr/bin/tail -f /dev/null<span style="color:#66d9ef">)</span>
+<span style="color:#75715e"># delete the auto-created .dockerenv marker file so it doesn&#39;t end up in the squashfs image</span>
+sudo docker exec <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>CONTAINER_ID<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span> rm /.dockerenv
+<span style="color:#75715e"># extract the Docker image contents to a tarball</span>
+sudo docker cp <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>CONTAINER_ID<span style="color:#e6db74">}</span><span style="color:#e6db74">:/&#34;</span> - &gt; newfilesystem.tar
+<span style="color:#75715e"># get the package listing for installation from ISO</span>
+sudo docker exec <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>CONTAINER_ID<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span> dpkg-query -W --showformat<span style="color:#f92672">=</span><span style="color:#e6db74">&#39;${Package} ${Version}\n&#39;</span> &gt; newfilesystem.manifest
+<span style="color:#75715e"># kill the container instance of the Docker image</span>
+sudo docker rm -f <span style="color:#e6db74">&#34;</span><span style="color:#e6db74">${</span>CONTAINER_ID<span style="color:#e6db74">}</span><span style="color:#e6db74">&#34;</span>
+<span style="color:#75715e"># convert the image tarball into a squashfs image</span>
+tar2sqfs --quiet newfilesystem.squashfs &lt; newfilesystem.tar
+</code></pre></div><h2 id="repacking-the-iso-image">Repacking the ISO image</h2>
+<p>Now that we have the new squashfs image, it&rsquo;s time to repack the ISO image.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh"><span style="color:#75715e"># create a directory to build the ISO from</span>
+mkdir iso
+
+<span style="color:#75715e"># extract the contents of the ISO to the directory, except the original squashfs image</span>
+<span style="color:#75715e"># UBUNTU_ISO_PATH=path to the Ubuntu live ISO downloaded earlier</span>
+7z x <span style="color:#e6db74">&#39;-xr!filesystem.squashfs&#39;</span> -oiso <span style="color:#e6db74">&#34;</span>$UBUNTU_ISO_PATH<span style="color:#e6db74">&#34;</span>
+
+<span style="color:#75715e"># copy our custom squashfs image and manifest into place</span>
+cp newfilesystem.squashfs iso/casper/filesystem.squashfs
+stat --printf<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;%s&#34;</span> iso/casper/filesystem.squashfs &gt; iso/casper/filesystem.size
+cp newfilesystem.manifest iso/casper/filesystem.manifest
+
+<span style="color:#75715e"># update state files</span>
+<span style="color:#f92672">(</span>cd iso; find . -type f -print0 | xargs -0 md5sum | grep -v <span style="color:#e6db74">&#34;\./md5sum.txt&#34;</span> &gt; md5sum.txt<span style="color:#f92672">)</span>
+
+<span style="color:#75715e"># remove obsolete files</span>
+rm iso/casper/filesystem.squashfs.gpg
+
+<span style="color:#75715e"># build the ISO image using the image itself</span>
+sudo docker run <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    -it <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    --rm <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    -v <span style="color:#e6db74">&#34;</span><span style="color:#66d9ef">$(</span>pwd<span style="color:#66d9ef">)</span><span style="color:#e6db74">:/app&#34;</span> <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    ubuntulive:image <span style="color:#ae81ff">\
+</span><span style="color:#ae81ff"></span>    grub-mkrescue -v -o /app/ubuntulive.iso /app/iso/ -- -volid UbuntuLive
+</code></pre></div><p>That&rsquo;s it. The repacked custom Ubuntu live ISO can now be found in <code>./ubuntulive.iso</code>. Test it out by using <a href="https://help.gnome.org/users/gnome-boxes/stable/">GNOME Boxes</a> or another VM tool, or turn it into a bootable USB drive using <code>dd</code> or a GUI tool like <a href="https://www.balena.io/etcher/">balenaEtcher</a>.</p>
+<h2 id="caveats">Caveats</h2>
+<ul>
+<li>I don&rsquo;t use these ISOs for installation, so I haven&rsquo;t tested that part of the functionality after customisation</li>
+<li>packages that interact with systemd during installation will fail as there is no systemd instance running in the Docker environment. This should only be a problem with non-standard packages; all Ubuntu/Debian packages handle this case properly</li>
+</ul>
+
+</div>
+
+            <div class="footer">
+                
+
+
+
+            </div>
+        </div>
+        
+                
+    </body>
+</html>
