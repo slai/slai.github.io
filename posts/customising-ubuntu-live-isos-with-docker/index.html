@@ -199,6 +199,7 @@ sudo docker run <span style="color:#ae81ff">\
 <ul>
 <li>I don&rsquo;t use these ISOs for installation, so I haven&rsquo;t tested that part of the functionality after customisation</li>
 <li>packages that interact with systemd during installation will fail as there is no systemd instance running in the Docker environment. This should only be a problem with non-standard packages; all Ubuntu/Debian packages handle this case properly</li>
+<li>the kernel image used to boot comes as part of the ISO and will not be updated from within the Dockerfile with this process (e.g. via <code>apt</code>). To update the kernel image, download a new Ubuntu live ISO then repeat all the steps, <strong>including</strong> recreating the Docker base image. If the Docker base image is not recreated, it may become out-of-sync with the kernel image version and the ISO will not boot</li>
 </ul>
 
 </div>
