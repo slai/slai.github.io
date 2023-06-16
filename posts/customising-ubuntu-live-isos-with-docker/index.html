@@ -156,15 +156,16 @@
 
 <span style="color:#66d9ef">[Service]</span>
 <span style="color:#a6e22e">Type</span><span style="color:#f92672">=</span><span style="color:#e6db74">oneshot</span>
-<span style="color:#a6e22e">ExecStart</span><span style="color:#f92672">=</span><span style="color:#e6db74">ln -fsv /run/systemd/resolve/resolv.conf /etc/resolv.conf</span>
+<span style="color:#a6e22e">ExecStart</span><span style="color:#f92672">=</span><span style="color:#e6db74">ln -fsv /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf</span>
 
 <span style="color:#66d9ef">[Install]</span>
 <span style="color:#a6e22e">WantedBy</span><span style="color:#f92672">=</span><span style="color:#e6db74">multi-user.target</span>
 </code></pre></div><p>Save the above to a file named <code>restore-resolvconf-symlink.service</code> in the same directory as the Dockerfile, then add the following to the Dockerfile to include it into the image -</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-dockerfile" data-lang="dockerfile"><span style="color:#75715e"># fix up the /etc/resolv.conf symlink that Docker force bind-mounts</span><span style="color:#960050;background-color:#1e0010">
-</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">COPY</span> restore-resolvconf-symlink.service /lib/systemd/system/<span style="color:#960050;background-color:#1e0010">
-</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">RUN</span> ln -s /lib/systemd/system/restore-resolvconf-symlink.service /etc/systemd/system/multi-user.target.wants<span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">COPY</span> restore-resolvconf-symlink.service /etc/systemd/system/<span style="color:#960050;background-color:#1e0010">
+</span><span style="color:#960050;background-color:#1e0010"></span><span style="color:#66d9ef">RUN</span> ln -s /etc/systemd/system/restore-resolvconf-symlink.service /etc/systemd/system/multi-user.target.wants<span style="color:#960050;background-color:#1e0010">
 </span></code></pre></div><p>With this, every time the image is started, this service will restore systemd-resolved&rsquo;s resolv.conf to <code>/etc/resolv.conf</code>, before the network is configured and used by the system, ensuring all DNS requests will use systemd-resolved.</p>
+<p>(Specifically, this tells the system to use systemd-resolved&rsquo;s stub resolver which has additional features like per-interface DNS configuration and caching. If this is causing issues, change <code>/run/systemd/resolve/stub-resolv.conf</code> to <code>/run/systemd/resolve/resolv.conf</code> in the service unit file above to bypass the stub resolver and go straight to the DNS servers configured in systemd-resolved.)</p>
 <h2 id="building-the-customised-image">Building the customised image</h2>
 <p>First off, run the following to exclude the squashfs image and ISO from your build context to save time -</p>
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">echo <span style="color:#e6db74">&#34;**/*.squashfs&#34;</span> &gt;&gt; .dockerignore
