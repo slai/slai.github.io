@@ -100,7 +100,7 @@
 <h2 id="requirements">Requirements</h2>
 <p>To start, a Linux distro with <a href="https://github.com/AgentD/squashfs-tools-ng">squashfs-tools-ng</a> binaries available is needed to extract and repack the disk image in the ISO. At the time of writing, Ubuntu 20.04 LTS is the earliest version of Ubuntu supported.</p>
 <p><a href="https://docs.docker.com/engine/install/ubuntu/">Docker</a> is also needed, as are the following packages -</p>
-<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">apt-get install p7zip-full grub2-common mtools xorriso squashfs-tools-ng
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">apt-get install p7zip-full grub2-common mtools xorriso squashfs-tools-ng jq
 </code></pre></div><p>Finally, download a copy of the Ubuntu live ISO to be customised from <a href="https://ubuntu.com/download/desktop">https://ubuntu.com/download/desktop</a>. (This process will likely also work for other Ubuntu editions like the server edition, but there are often better ways to deploy servers.)</p>
 <h2 id="creating-the-docker-base-image">Creating the Docker base image</h2>
 <p>The ISO works by booting the Linux kernel, mounting a squashfs image and starting Ubuntu from that. Therefore we need to grab that squashfs image from the ISO and create a Docker base image from it.</p>
@@ -192,9 +192,21 @@ tar2sqfs --quiet newfilesystem.squashfs &lt; newfilesystem.tar
 <div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh"><span style="color:#75715e"># create a directory to build the ISO from</span>
 mkdir iso
 
+<span style="color:#75715e"># this is the path to the Ubuntu live ISO downloaded earlier</span>
+UBUNTU_ISO_PATH<span style="color:#f92672">=</span>ubuntu_iso_path
+
 <span style="color:#75715e"># extract the contents of the ISO to the directory, except the original squashfs image</span>
-<span style="color:#75715e"># UBUNTU_ISO_PATH=path to the Ubuntu live ISO downloaded earlier</span>
 7z x <span style="color:#e6db74">&#39;-xr!filesystem.squashfs&#39;</span> -oiso <span style="color:#e6db74">&#34;</span>$UBUNTU_ISO_PATH<span style="color:#e6db74">&#34;</span>
+
+<span style="color:#75715e"># extract the EFI binaries from the ISO, they reside in a separate partition</span>
+<span style="color:#75715e"># this allows the custom ISO to work when Secure Boot is enabled</span>
+EFI_PARTITION_DATA<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#66d9ef">$(</span>sfdisk --json <span style="color:#e6db74">&#34;</span>$UBUNTU_ISO_PATH<span style="color:#e6db74">&#34;</span> | jq <span style="color:#e6db74">&#39;.partitiontable.partitions | map(select(.type == &#34;C12A7328-F81F-11D2-BA4B-00A0C93EC93B&#34;))[0]&#39;</span><span style="color:#66d9ef">)</span><span style="color:#e6db74">&#34;</span>
+EFI_PARTITION_START<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#66d9ef">$(</span>echo <span style="color:#e6db74">&#34;</span>$EFI_PARTITION_DATA<span style="color:#e6db74">&#34;</span> | jq <span style="color:#e6db74">&#39;.start&#39;</span><span style="color:#66d9ef">)</span><span style="color:#e6db74">&#34;</span>
+EFI_PARTITION_SIZE<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;</span><span style="color:#66d9ef">$(</span>echo <span style="color:#e6db74">&#34;</span>$EFI_PARTITION_DATA<span style="color:#e6db74">&#34;</span> | jq <span style="color:#e6db74">&#39;.size&#39;</span><span style="color:#66d9ef">)</span><span style="color:#e6db74">&#34;</span>
+dd bs<span style="color:#f92672">=</span><span style="color:#ae81ff">512</span> <span style="color:#e6db74">&#34;count=</span>$EFI_PARTITION_SIZE<span style="color:#e6db74">&#34;</span> <span style="color:#e6db74">&#34;skip=</span>$EFI_PARTITION_START<span style="color:#e6db74">&#34;</span> <span style="color:#e6db74">&#34;if=</span>$UBUNTU_ISO_PATH<span style="color:#e6db74">&#34;</span> of<span style="color:#f92672">=</span>efi.img
+<span style="color:#75715e"># grub looks in both the separate partition and /efi.img for the EFI binaries,</span>
+<span style="color:#75715e"># so writing the partition to /efi.img has the same effect</span>
+cp efi.img iso/
 
 <span style="color:#75715e"># copy our custom squashfs image and manifest into place</span>
 cp newfilesystem.squashfs iso/casper/filesystem.squashfs
